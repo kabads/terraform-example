@@ -5,10 +5,10 @@ provider "aws" {
 }
 
 resource "aws_vpc" "example" {
-  cidr_block = "198.18.0.0/16"
+  cidr_block = "${var.vpc_cidr_block}"
 
   tags {
-    Name = "example-vpc"
+    Name = "${var.vpc_name}"
   }
 }
 
@@ -18,7 +18,7 @@ resource "aws_internet_gateway" "example" {
 
 resource "aws_subnet" "example-public" {
   vpc_id                  = "${aws_vpc.example.id}"
-  cidr_block              = "198.18.1.0/24"
+  cidr_block              = "${var.public_subnet_cidr_block}"
   map_public_ip_on_launch = "true"
 }
 
@@ -35,13 +35,32 @@ resource "aws_route_table" "example-public" {
   }
 }
 
+resource "aws_default_route_table" "example_private_rt" {
+  default_route_table_id = "${aws_vpc.example.default_route_table_id}"
+
+  tags {
+    Name = "example-private-rt"
+  }
+}
+
 resource "aws_route_table_association" "example_public_assoc" {
   subnet_id      = "${aws_subnet.example-public.id}"
   route_table_id = "${aws_route_table.example-public.id}"
 }
 
-resource "aws_security_group" "example-sg" {
-  name        = "example-sg"
+resource "aws_subnet" "example-private-sg" {
+  vpc_id                  = "${aws_vpc.example.id}"
+  cidr_block              = "${var.cidrs["private1"]}"
+  map_public_ip_on_launch = false
+  
+
+  tags {
+    Name = "example-private-sg"
+  }
+}
+
+resource "aws_security_group" "example-public-sg" {
+  name        = "example-public-sg"
   description = "used for port 80 traffic"
   vpc_id      = "${aws_vpc.example.id}"
 
@@ -71,7 +90,7 @@ resource "aws_instance" "http" {
   ami                    = "ami-922914f7"
   instance_type          = "t2.micro"
   key_name               = "${var.keyname}"
-  vpc_security_group_ids = ["${aws_security_group.example-sg.id}"]
+  vpc_security_group_ids = ["${aws_security_group.example-public-sg.id}"]
   subnet_id              = "${aws_subnet.example-public.id}"
 
   tags {
@@ -88,4 +107,8 @@ resource "aws_instance" "http" {
                chown apache.apache /var/www/html/index.html
                chmod 755 /var/www/html/index.html
                EOF
+}
+
+output "public_ip" {
+  value = "${aws_instance.http.public_ip}"
 }
